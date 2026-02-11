@@ -203,9 +203,7 @@ Output files:
     
     start_time = datetime.now()
     
-    print("\n" + "="*80)
-    print("MOLECULAR DATA PREPROCESSING")
-    print("="*80)
+    print("\nMOLECULAR DATA PREPROCESSING")
     print(f"Started: {start_time:%Y-%m-%d %H:%M:%S}")
     print(f"Input: {args.input}")
     print(f"Output: {args.output_dir}")
@@ -243,9 +241,7 @@ Output files:
         )
         
         # Save datasets
-        print("\n" + "="*80)
-        print("SAVING RESULTS")
-        print("="*80)
+        print("\nSAVING RESULTS")
         
         train_file = output_dir / 'train_df.csv'
         test_file = output_dir / 'test_df.csv'
@@ -253,27 +249,25 @@ Output files:
         train_df.to_csv(train_file, index=False)
         test_df.to_csv(test_file, index=False)
         
-        print(f"\n✓ Saved training data: {train_file}")
+        print(f"\nSaved training data: {train_file}")
         print(f"  Shape: {train_df.shape}")
-        print(f"✓ Saved test data: {test_file}")
+        print(f"Saved test data: {test_file}")
         print(f"  Shape: {test_df.shape}")
         
         # Save statistics
         stats_json = output_dir / 'preprocessing_stats.json'
         with open(stats_json, 'w') as f:
             json.dump(stats, f, indent=2)
-        print(f"\n✓ Saved statistics: {stats_json.name}")
+        print(f"\nSaved statistics: {stats_json.name}")
         
         stats_df = get_preprocessing_statistics(stats)
         stats_csv = output_dir / 'preprocessing_stats.csv'
         stats_df.to_csv(stats_csv)
-        print(f"✓ Saved statistics table: {stats_csv.name}")
+        print(f"Saved statistics table: {stats_csv.name}")
         
         # Generate visualizations
         if not args.no_plots:
-            print("\n" + "="*80)
-            print("GENERATING VISUALIZATIONS")
-            print("="*80)
+            print("\nGENERATING VISUALIZATIONS")
             
             # Similarity distribution
             similarities = calculate_train_test_similarity(
@@ -293,9 +287,7 @@ Output files:
         end_time = datetime.now()
         duration = end_time - start_time
         
-        print("\n" + "="*80)
-        print("PREPROCESSING COMPLETED SUCCESSFULLY!")
-        print("="*80)
+        print("\nPREPROCESSING COMPLETED SUCCESSFULLY!")
         print(f"Duration: {duration}")
         print(f"\nOutput directory: {args.output_dir}")
         print(f"  Files created:")
@@ -311,9 +303,7 @@ Output files:
         print(f"  python pipeline.py --input {train_file} --output cv_results/")
         
     except Exception as e:
-        print(f"\n{'='*80}")
-        print(f"❌ ERROR: {e}")
-        print(f"{'='*80}")
+        print(f"\nERROR: {e}")
         import traceback
         traceback.print_exc()
         raise
