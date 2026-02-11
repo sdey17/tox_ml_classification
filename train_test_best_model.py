@@ -90,11 +90,11 @@ def load_and_validate_data(filepath, dataset_name="Data"):
     valid_smiles = []
     valid_labels = []
     
-    for idx, row in df.iterrows():
-        mol = Chem.MolFromSmiles(row['SMILES'])
+    for smi, label in zip(df['SMILES'], df['CLASS']):
+        mol = Chem.MolFromSmiles(smi)
         if mol is not None:
-            valid_smiles.append(row['SMILES'])
-            valid_labels.append(row['CLASS'])
+            valid_smiles.append(smi)
+            valid_labels.append(label)
     
     print(f"  Valid SMILES: {len(valid_smiles)}")
     print(f"  Invalid SMILES: {len(df) - len(valid_smiles)}")
