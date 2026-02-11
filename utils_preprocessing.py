@@ -22,21 +22,8 @@ from rdkit.Chem import rdFingerprintGenerator
 from rdkit.Chem.SaltRemover import SaltRemover
 from rdkit.DataStructs import BulkTanimotoSimilarity
 
-# ChEMBL structure pipeline
-try:
-    from chembl_structure_pipeline import standardizer, exclude_flag
-    CHEMBL_AVAILABLE = True
-except ImportError:
-    CHEMBL_AVAILABLE = False
-    warnings.warn("chembl_structure_pipeline not available. Standardization will be limited.")
-
-# Useful RDKit utilities for Butina clustering
-try:
-    import useful_rdkit_utils as uru
-    BUTINA_AVAILABLE = True
-except ImportError:
-    BUTINA_AVAILABLE = False
-    warnings.warn("useful_rdkit_utils not available. Butina clustering will be disabled.")
+from chembl_structure_pipeline import standardizer, exclude_flag
+import useful_rdkit_utils as uru
 
 warnings.filterwarnings('ignore')
 
@@ -63,13 +50,8 @@ def is_valid_structure(smiles: str) -> bool:
         if mol is None:
             return False
         
-        # Use ChEMBL exclusion rules if available
-        if CHEMBL_AVAILABLE:
-            exclude = exclude_flag.exclude_flag(mol)
-            return not exclude
-        else:
-            # Basic validation without ChEMBL
-            return True
+        exclude = exclude_flag.exclude_flag(mol)
+        return not exclude
             
     except Exception as e:
         logging.debug(f"Validation error for {smiles}: {e}")
@@ -97,19 +79,13 @@ def standardize_and_canonicalize(smiles: str) -> Optional[str]:
         if molecule is None:
             return None
         
-        if CHEMBL_AVAILABLE:
-            # ChEMBL standardization pipeline
-            m_no_salts = standardizer.get_parent_mol(molecule)
-            to_standardize = m_no_salts[0]
-            remover = SaltRemover()
-            stripped = remover.StripMol(to_standardize)
-            std_mol = standardizer.standardize_mol(stripped)
-            canonical_smiles = Chem.MolToSmiles(std_mol)
-        else:
-            # Fallback: Basic standardization
-            remover = SaltRemover()
-            stripped = remover.StripMol(molecule)
-            canonical_smiles = Chem.MolToSmiles(stripped)
+        # ChEMBL standardization pipeline
+        m_no_salts = standardizer.get_parent_mol(molecule)
+        to_standardize = m_no_salts[0]
+        remover = SaltRemover()
+        stripped = remover.StripMol(to_standardize)
+        std_mol = standardizer.standardize_mol(stripped)
+        canonical_smiles = Chem.MolToSmiles(std_mol)
         
         return canonical_smiles
         
@@ -173,11 +149,7 @@ def add_butina_clusters(df: pd.DataFrame,
         Requires useful_rdkit_utils package
         Uses Butina clustering for structural similarity
     """
-    if not BUTINA_AVAILABLE:
-        raise ImportError(
-            "useful_rdkit_utils not available. "
-            "Install with: pip install useful-rdkit-utils"
-        )
+
     
     print(f"  Running Butina clustering on {len(df)} molecules...")
     df[cluster_col] = uru.get_butina_clusters(df[smiles_col])
