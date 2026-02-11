@@ -307,7 +307,7 @@ class ToxicityPipeline:
         print(f"  Model: {best['Model']}")
         print(f"  ROC-AUC: {best['ROC_AUC']:.3f}")
         print(f"  MCC: {best['MCC']:.3f}")
-        print(f"  GMean: {best['F1']:.3f}")
+        print(f"  GMean: {best['GMean']:.3f}")
         
         return summary
     
