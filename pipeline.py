@@ -375,30 +375,30 @@ class ToxicityPipeline:
         # Boxplots
         print("\nBoxplots:")
         for descriptor in results_df['Descriptor'].unique():
-            for metric in ['ROC_AUC', 'MCC', 'GMean']:
+            for metric in Config.VIZ_METRICS:
                 filename = self.viz.plot_boxplot(
                     results_df, descriptor, metric,
                     model_order=Config.MODELS
                 )
                 print(f"  Saved: {filename.name}")
-        
+
         # P-value heatmaps
         print("\nP-value heatmaps:")
         for descriptor in results_df['Descriptor'].unique():
-            for metric in ['ROC_AUC', 'MCC', 'GMean']:
+            for metric in Config.VIZ_METRICS:
                 tukey_res = self.stats.tukey_hsd(results_df, descriptor, metric)
                 pvalue_matrix = create_pairwise_matrix(tukey_res)
                 filename = self.viz.plot_tukey_heatmap(pvalue_matrix, metric, descriptor)
                 print(f"  Saved: {filename.name}")
-        
+
         # Comparison plot
         print("\nComparison plot:")
         filename = self.viz.plot_comparison(summary_df, metrics=Config.VIZ_METRICS)
         print(f"  Saved: {filename.name}")
-        
+
         # Combined boxplots (all descriptors together)
         print("\nCombined boxplots:")
-        for metric in ['ROC_AUC', 'MCC', 'GMean']:
+        for metric in Config.VIZ_METRICS:
             filename = self.viz.create_combined_boxplot(
                 results_df, metric,
                 descriptor_order=Config.DESCRIPTORS,

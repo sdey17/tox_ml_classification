@@ -78,18 +78,17 @@ class DescriptorGenerator:
     def _create_cache_key(self, descriptor_type, smiles_list, **kwargs):
         """
         Create unique cache key from descriptor type and SMILES.
-        
+
         Args:
             descriptor_type: Type of descriptor
             smiles_list: List of SMILES strings
             **kwargs: Additional parameters
-            
+
         Returns:
             Cache filename
         """
-        # Sort SMILES for consistent hashing
-        smiles_sorted = sorted(smiles_list)
-        smiles_str = '|'.join(smiles_sorted)
+        # Use original order for hashing (order matters for row alignment)
+        smiles_str = '|'.join(smiles_list)
         
         # Create hash
         hash_obj = hashlib.md5(smiles_str.encode())

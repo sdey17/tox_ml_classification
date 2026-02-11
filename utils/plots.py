@@ -49,7 +49,7 @@ def set_publication_style():
 # ============================================================================
 
 def plot_pvalue_heatmap(pvalue_matrix, title="P-value Heatmap",
-                        alpha_levels=[0.001, 0.01, 0.05, 1.0],
+                        alpha_levels=[0.0, 0.001, 0.01, 0.05, 1.0],
                         colors=["#00441b", "#238b45", "#99d8c9", "#fee0d2"],
                         figsize=(10, 8), save_path=None):
     """
@@ -655,12 +655,13 @@ def grouped_minmax_heatmap(
     cbar = fig.colorbar(im, ax=ax)
     cbar.set_label("Min-max scaled metric")
     
+    plt.tight_layout()
+
     if save_path is not None:
         fig.savefig(save_path, dpi=300, bbox_inches="tight")
         plt.close()
-
-    plt.tight_layout()
-    plt.show()
+    else:
+        plt.show()
 
 
 # ============================================================================

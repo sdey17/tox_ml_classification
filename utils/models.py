@@ -46,26 +46,6 @@ import torch
 DEVICE = 'cuda' if torch.cuda.is_available() else 'cpu'
 
 # ============================================================================
-# Scaling Strategy
-# ============================================================================
-
-def get_scaler_for_descriptor(descriptor_type):
-    """
-    Get appropriate scaler based on descriptor type.
-    
-    Args:
-        descriptor_type: Descriptor name (e.g., 'Morgan', 'Mordred')
-        
-    Returns:
-        MinMaxScaler for Mordred, None for others
-    """
-    if descriptor_type.lower() == 'mordred':
-        return MinMaxScaler()
-    else:
-        return None  # No scaling for fingerprints/embeddings!
-
-
-# ============================================================================
 # Model Factory
 # ============================================================================
 
@@ -84,7 +64,7 @@ class ModelFactory:
     @staticmethod
     def create_svm(kernel='rbf', random_state=42, **kwargs):
         """Create Support Vector Machine classifier."""
-        return SVC(kernel=kernel, probability=True, random_state=random_state)
+        return SVC(kernel=kernel, probability=True, class_weight='balanced', random_state=random_state)
     
     @staticmethod
     def create_bayesian(alpha=1.0, **kwargs):
@@ -265,22 +245,25 @@ class CrossValidator:
 
         results = []
 
-        # Get appropriate scaler based on descriptor type
-        scaler = get_scaler_for_descriptor(descriptor_name)
-        
-        if scaler is not None:
-            print(f"    Using MinMaxScaler for {descriptor_name}")
-            X = scaler.fit_transform(X)
+        use_scaler = descriptor_name.lower() == 'mordred'
+        if use_scaler:
+            print(f"    Using MinMaxScaler for {descriptor_name} (fit per fold)")
         else:
             print(f"    No scaling for {descriptor_name} (already normalized)")
-        
+
         for repeat in range(self.n_repeats):
             seed = self.random_state + repeat
             skf = StratifiedKFold(n_splits=self.n_folds, shuffle=True, random_state=seed)
-            
+
             for fold, (train_idx, val_idx) in enumerate(skf.split(X, y)):
                 X_train, X_val = X[train_idx], X[val_idx]
                 y_train, y_val = y[train_idx], y[val_idx]
+
+                # Scale inside the fold to prevent data leakage
+                if use_scaler:
+                    scaler = MinMaxScaler()
+                    X_train = scaler.fit_transform(X_train)
+                    X_val = scaler.transform(X_val)
                 
                 # Train and evaluate
                 try:

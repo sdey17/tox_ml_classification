@@ -27,6 +27,9 @@ import useful_rdkit_utils as uru
 
 warnings.filterwarnings('ignore')
 
+# Module-level SaltRemover (avoid re-instantiation per molecule)
+_SALT_REMOVER = SaltRemover()
+
 
 # ============================================================================
 # Structure Validation and Standardization
@@ -82,8 +85,7 @@ def standardize_and_canonicalize(smiles: str) -> Optional[str]:
         # ChEMBL standardization pipeline
         m_no_salts = standardizer.get_parent_mol(molecule)
         to_standardize = m_no_salts[0]
-        remover = SaltRemover()
-        stripped = remover.StripMol(to_standardize)
+        stripped = _SALT_REMOVER.StripMol(to_standardize)
         std_mol = standardizer.standardize_mol(stripped)
         canonical_smiles = Chem.MolToSmiles(std_mol)
         
@@ -189,9 +191,8 @@ def split_by_clusters(df: pd.DataFrame,
         Iteratively selects clusters to match target test size
     """
     import random
-    random.seed(random_state)
-    np.random.seed(random_state)
-    
+    rng = random.Random(random_state)
+
     # Get cluster sizes
     cluster_counts = df[cluster_col].value_counts()
     cluster_sizes = cluster_counts.to_dict()
@@ -207,7 +208,7 @@ def split_by_clusters(df: pd.DataFrame,
     
     # Try to find valid split
     for attempt in range(max_tries):
-        random.shuffle(all_clusters)
+        rng.shuffle(all_clusters)
         selected_clusters = []
         current_size = 0
         
