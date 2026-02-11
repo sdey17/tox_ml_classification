@@ -27,8 +27,8 @@ from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.metrics import (accuracy_score, precision_score, recall_score,
                               roc_auc_score, matthews_corrcoef, confusion_matrix)
 
-from utils_descriptors import DescriptorGenerator
-from utils_models import ModelFactory, calculate_metrics 
+from utils.descriptors import DescriptorGenerator
+from utils.models import ModelFactory, calculate_metrics
 
 warnings.filterwarnings('ignore')
 

@@ -20,10 +20,10 @@ from rdkit import Chem
 warnings.filterwarnings('ignore', message='PYTORCH_CUDA_ALLOC_CONF is deprecated')
 
 # Import our utilities
-from utils_descriptors import DescriptorGenerator, get_available_descriptors
-from utils_models import CrossValidator, get_available_models
-from utils_stats import StatisticalAnalyzer
-from utils_plots import Visualizer
+from utils.descriptors import DescriptorGenerator, get_available_descriptors
+from utils.models import CrossValidator, get_available_models
+from utils.stats import StatisticalAnalyzer, create_pairwise_matrix
+from utils.plots import Visualizer
 
 
 # ============================================================================
@@ -387,7 +387,8 @@ class ToxicityPipeline:
         for descriptor in results_df['Descriptor'].unique():
             for metric in ['ROC_AUC', 'MCC', 'GMean']:
                 tukey_res = self.stats.tukey_hsd(results_df, descriptor, metric)
-                filename = self.viz.plot_tukey_heatmap(tukey_res, metric, descriptor)
+                pvalue_matrix = create_pairwise_matrix(tukey_res)
+                filename = self.viz.plot_tukey_heatmap(pvalue_matrix, metric, descriptor)
                 print(f"  Saved: {filename.name}")
         
         # Comparison plot

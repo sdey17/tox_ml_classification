@@ -32,12 +32,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from utils_preprocessing import (
+from utils.preprocessing import (
     preprocess_dataset,
     calculate_train_test_similarity,
     get_preprocessing_statistics,
-    CHEMBL_AVAILABLE,
-    BUTINA_AVAILABLE
 )
 
 warnings.filterwarnings('ignore')
@@ -212,18 +210,8 @@ Output files:
     print(f"Input: {args.input}")
     print(f"Output: {args.output_dir}")
     
-    # Check dependencies
-    if not args.no_standardize and not CHEMBL_AVAILABLE:
-        print("\n⚠️  WARNING: chembl_structure_pipeline not available")
-        print("   Standardization will be limited. Install with:")
-        print("   pip install chembl_structure_pipeline")
-    
-    if not args.no_butina and not BUTINA_AVAILABLE:
-        print("\n⚠️  WARNING: useful_rdkit_utils not available")
-        print("   Butina clustering disabled. Install with:")
-        print("   pip install useful-rdkit-utils")
-        args.no_butina = True
-    
+    # Dependencies are guaranteed by requirements.txt
+
     try:
         # Create output directory
         output_dir = Path(args.output_dir)
