@@ -18,6 +18,7 @@ Supported models:
 import warnings
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 from sklearn.preprocessing import MinMaxScaler
 
@@ -251,6 +252,9 @@ class CrossValidator:
         else:
             print(f"    No scaling for {descriptor_name} (already normalized)")
 
+        total_folds = self.n_repeats * self.n_folds
+        pbar = tqdm(total=total_folds, desc=f"    {model_name}", leave=False)
+
         for repeat in range(self.n_repeats):
             seed = self.random_state + repeat
             skf = StratifiedKFold(n_splits=self.n_folds, shuffle=True, random_state=seed)
@@ -264,19 +268,19 @@ class CrossValidator:
                     scaler = MinMaxScaler()
                     X_train = scaler.fit_transform(X_train)
                     X_val = scaler.transform(X_val)
-                
+
                 # Train and evaluate
                 try:
                     model = ModelFactory.create(model_name, random_state=seed, device=self.device)
                     model.fit(X_train, y_train)
-                    
+
                     # Predictions
                     y_pred = model.predict(X_val)
                     y_prob = model.predict_proba(X_val)[:, 1] if hasattr(model, 'predict_proba') else None
-                    
+
                     # Metrics
                     metrics = MetricsCalculator.calculate_metrics(y_val, y_pred, y_prob)
-                    
+
                     # Store
                     result = {
                         'Descriptor': descriptor_name,
@@ -286,10 +290,13 @@ class CrossValidator:
                         **metrics
                     }
                     results.append(result)
-                
+
                 except Exception as e:
                     print(f"      Error in fold {fold+1}: {e}")
-        
+
+                pbar.update(1)
+
+        pbar.close()
         return results
     
 

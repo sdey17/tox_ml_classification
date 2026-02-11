@@ -22,6 +22,7 @@ from datetime import datetime
 import numpy as np
 import pandas as pd
 import joblib
+from tqdm import tqdm
 from rdkit import Chem
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
 from sklearn.metrics import (accuracy_score, precision_score, recall_score,
@@ -90,12 +91,12 @@ def load_and_validate_data(filepath, dataset_name="Data"):
     valid_smiles = []
     valid_labels = []
     
-    for smi, label in zip(df['SMILES'], df['CLASS']):
+    for smi, label in tqdm(zip(df['SMILES'], df['CLASS']), total=len(df), desc="  Validating SMILES", leave=False):
         mol = Chem.MolFromSmiles(smi)
         if mol is not None:
             valid_smiles.append(smi)
             valid_labels.append(label)
-    
+
     print(f"  Valid SMILES: {len(valid_smiles)}")
     print(f"  Invalid SMILES: {len(df) - len(valid_smiles)}")
     

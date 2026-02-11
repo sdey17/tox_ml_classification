@@ -17,6 +17,7 @@ from typing import Tuple, List, Optional
 
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 from rdkit import Chem
 from rdkit.Chem import rdFingerprintGenerator
 from rdkit.Chem.SaltRemover import SaltRemover
@@ -291,7 +292,7 @@ def calculate_train_test_similarity(train_smiles: List[str],
     
     # Calculate similarities
     result_list = []
-    for test_fp in test_fps:
+    for test_fp in tqdm(test_fps, desc="  Tanimoto similarity", leave=False):
         sim_list = BulkTanimotoSimilarity(test_fp, train_fps)
         sim_array = np.array(sim_list)
         
@@ -357,7 +358,8 @@ def preprocess_dataset(input_df: pd.DataFrame,
     # Step 1: Validate structures
     if validate:
         print(f"\nStep 1: Validating structures...")
-        df['is_valid'] = df[smiles_col].apply(is_valid_structure)
+        tqdm.pandas(desc="  Validating")
+        df['is_valid'] = df[smiles_col].progress_apply(is_valid_structure)
         df = df[df['is_valid'] == True].drop(columns=['is_valid'])
         stats['after_validation'] = len(df)
         print(f"  Valid structures: {len(df)}")
@@ -365,7 +367,8 @@ def preprocess_dataset(input_df: pd.DataFrame,
     # Step 2: Standardize SMILES
     if standardize:
         print(f"\nStep 2: Standardizing SMILES...")
-        df[smiles_col] = df[smiles_col].apply(standardize_and_canonicalize)
+        tqdm.pandas(desc="  Standardizing")
+        df[smiles_col] = df[smiles_col].progress_apply(standardize_and_canonicalize)
         df = df.dropna(subset=[smiles_col])
         stats['after_standardization'] = len(df)
         print(f"  After standardization: {len(df)}")

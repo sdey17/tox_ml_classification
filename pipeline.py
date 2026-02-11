@@ -14,6 +14,7 @@ from datetime import datetime
 
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 from rdkit import Chem
 
 # Suppress common warnings
@@ -177,12 +178,12 @@ class ToxicityPipeline:
         valid_smiles = []
         valid_labels = []
         
-        for smi, label in zip(df['SMILES'], df['CLASS']):
+        for smi, label in tqdm(zip(df['SMILES'], df['CLASS']), total=len(df), desc="  Validating SMILES", leave=False):
             mol = Chem.MolFromSmiles(smi)
             if mol is not None:
                 valid_smiles.append(smi)
                 valid_labels.append(label)
-        
+
         print(f"  Total molecules: {len(df)}")
         print(f"  Valid molecules: {len(valid_smiles)}")
         print(f"  Invalid SMILES: {len(df) - len(valid_smiles)}")
