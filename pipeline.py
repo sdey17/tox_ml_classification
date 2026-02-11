@@ -159,9 +159,7 @@ class ToxicityPipeline:
         Returns:
             Tuple of (smiles_list, labels)
         """
-        print("="*80)
         print("STEP 1: Loading Data")
-        print("="*80)
         
         # Load CSV
         df = pd.read_csv(self.input_file)
@@ -201,9 +199,7 @@ class ToxicityPipeline:
         Returns:
             Dictionary mapping descriptor_name -> scaled_features
         """
-        print("\n" + "="*80)
-        print("STEP 2: Generating Descriptors")
-        print("="*80)
+        print("\nSTEP 2: Generating Descriptors")
         
         available = get_available_descriptors()
         descriptors = {}
@@ -239,9 +235,7 @@ class ToxicityPipeline:
         Returns:
             DataFrame with per-fold results
         """
-        print("\n" + "="*80)
-        print("STEP 3: Training Models")
-        print("="*80)
+        print("\nSTEP 3: Training Models")
         
         available_models = get_available_models()
         all_results = []
@@ -283,9 +277,7 @@ class ToxicityPipeline:
         Returns:
             DataFrame with summary statistics
         """
-        print("\n" + "="*80)
-        print("STEP 4: Creating Summary")
-        print("="*80)
+        print("\nSTEP 4: Creating Summary")
         
         # Calculate means
         summary = results_df.groupby(['Descriptor', 'Model'])[Config.METRICS].mean().reset_index()
@@ -319,9 +311,7 @@ class ToxicityPipeline:
         Args:
             results_df: DataFrame with per-fold results
         """
-        print("\n" + "="*80)
-        print("STEP 5: Statistical Analysis")
-        print("="*80)
+        print("\nSTEP 5: Statistical Analysis")
         
         for descriptor in results_df['Descriptor'].unique():
             print(f"\n{descriptor}:")
@@ -359,9 +349,7 @@ class ToxicityPipeline:
             results_df: Per-fold results
             summary_df: Summary statistics
         """
-        print("\n" + "="*80)
-        print("STEP 6: Creating Visualizations")
-        print("="*80)
+        print("\nSTEP 6: Creating Visualizations")
         
         # Heatmaps
         print("\nHeatmaps:")
@@ -415,9 +403,7 @@ class ToxicityPipeline:
         """
         start_time = datetime.now()
         
-        print("\n" + "="*80)
-        print("TOXICITY CLASSIFICATION PIPELINE")
-        print("="*80)
+        print("\nTOXICITY CLASSIFICATION PIPELINE")
         print(f"Started: {start_time:%Y-%m-%d %H:%M:%S}\n")
         print(f"Descriptors: {', '.join(Config.DESCRIPTORS)}")
         print(f"Models: {', '.join(Config.MODELS)}")
@@ -436,9 +422,7 @@ class ToxicityPipeline:
             end_time = datetime.now()
             elapsed = end_time - start_time
             
-            print("\n" + "="*80)
-            print("PIPELINE COMPLETED SUCCESSFULLY")
-            print("="*80)
+            print("\nPIPELINE COMPLETED SUCCESSFULLY")
             print(f"Total time: {elapsed}")
             print(f"\nResults saved to: {self.output_dir}")
             print(f"  - results_summary.csv")
@@ -447,9 +431,7 @@ class ToxicityPipeline:
             print(f"  - plots/ (heatmaps, boxplots, comparisons)")
             
         except Exception as e:
-            print(f"\n{'='*80}")
-            print(f"ERROR: {e}")
-            print(f"{'='*80}")
+            print(f"\nERROR: {e}")
             raise
 
 

@@ -61,9 +61,7 @@ def find_best_model(results_dir, metric='ROC_AUC'):
     descriptor = best_row['Descriptor']
     model = best_row['Model']
     
-    print(f"\n{'='*80}")
-    print(f"BEST MODEL SELECTION (by {metric})")
-    print(f"{'='*80}")
+    print(f"\nBEST MODEL SELECTION (by {metric})")
     print(f"  Descriptor: {descriptor}")
     print(f"  Model: {model}")
     print(f"  CV {metric}: {best_row[metric]:.4f}")
@@ -73,9 +71,7 @@ def find_best_model(results_dir, metric='ROC_AUC'):
 
 def load_and_validate_data(filepath, dataset_name="Data"):
     """Load and validate SMILES data with labels."""
-    print(f"\n{'='*80}")
-    print(f"LOADING {dataset_name.upper()}")
-    print(f"{'='*80}")
+    print(f"\nLOADING {dataset_name.upper()}")
     
     df = pd.read_csv(filepath)
     print(f"  Total samples: {len(df)}")
@@ -186,9 +182,7 @@ Input CSV format (both train and test):
     
     start_time = datetime.now()
     
-    print("\n" + "="*80)
-    print("TRAIN FINAL MODEL AND EVALUATE ON TEST SET")
-    print("="*80)
+    print("\nTRAIN FINAL MODEL AND EVALUATE ON TEST SET")
     print(f"Started: {start_time:%Y-%m-%d %H:%M:%S}")
     
     try:
@@ -200,9 +194,7 @@ Input CSV format (both train and test):
         else:
             descriptor = args.descriptor
             model = args.model
-            print(f"\n{'='*80}")
-            print("MODEL SELECTION")
-            print(f"{'='*80}")
+            print("\nMODEL SELECTION")
             print(f"  Descriptor: {descriptor}")
             print(f"  Model: {model}")
         
@@ -219,9 +211,7 @@ Input CSV format (both train and test):
         output_dir.mkdir(parents=True, exist_ok=True)
         cache_dir = output_dir / 'descriptor_cache'
         
-        print(f"\n{'='*80}")
-        print("INITIALIZING DESCRIPTOR GENERATOR")
-        print(f"{'='*80}")
+        print("\nINITIALIZING DESCRIPTOR GENERATOR")
         desc_gen = DescriptorGenerator(cache_dir=cache_dir)
         print(f"  Descriptor type: {descriptor}")
         print(f"  Cache directory: {cache_dir}")
@@ -230,9 +220,7 @@ Input CSV format (both train and test):
         # ====================================================================
         # 4. GENERATE DESCRIPTORS (TRAIN + TEST COMBINED)
         # ====================================================================
-        print(f"\n{'='*80}")
-        print("GENERATING DESCRIPTORS")
-        print(f"{'='*80}")
+        print("\nGENERATING DESCRIPTORS")
         
         # Combine SMILES to ensure consistent feature space
         print(f"\nCombining train and test data for descriptor generation...")
@@ -255,9 +243,7 @@ Input CSV format (both train and test):
         # ====================================================================
         # 5. TRAIN MODEL
         # ====================================================================
-        print(f"\n{'='*80}")
-        print("TRAINING MODEL ON ALL TRAINING DATA")
-        print(f"{'='*80}")
+        print("\nTRAINING MODEL ON ALL TRAINING DATA")
 
         # Scale (only Mordred, only on train data)
         if descriptor.lower() == 'mordred':
@@ -285,9 +271,7 @@ Input CSV format (both train and test):
         y_train_proba = clf.predict_proba(X_train_scaled)[:, 1]
         train_metrics = calculate_metrics(y_train, y_train_pred, y_train_proba)
         
-        print(f"\n{'='*80}")
-        print("TRAINING SET PERFORMANCE")
-        print(f"{'='*80}")
+        print("\nTRAINING SET PERFORMANCE")
         for metric, value in train_metrics.items():
             if isinstance(value, float):
                 print(f"  {metric}: {value:.4f}")
@@ -297,9 +281,7 @@ Input CSV format (both train and test):
         # ====================================================================
         # 6. EVALUATE ON TEST SET
         # ====================================================================
-        print(f"\n{'='*80}")
-        print("EVALUATING ON TEST SET")
-        print(f"{'='*80}")
+        print("\nEVALUATING ON TEST SET")
         
         # X_test_scaled was already created in section 5
         y_test_pred = clf.predict(X_test_scaled)
@@ -308,9 +290,7 @@ Input CSV format (both train and test):
         # Calculate metrics
         test_metrics = calculate_metrics(y_test, y_test_pred, y_test_proba)
         
-        print(f"\n{'='*80}")
-        print("TEST SET PERFORMANCE")
-        print(f"{'='*80}")
+        print("\nTEST SET PERFORMANCE")
         for metric, value in test_metrics.items():
             if isinstance(value, float):
                 print(f"  {metric}: {value:.4f}")
@@ -320,9 +300,7 @@ Input CSV format (both train and test):
         # ====================================================================
         # 7. SAVE EVERYTHING
         # ====================================================================
-        print(f"\n{'='*80}")
-        print("SAVING RESULTS")
-        print(f"{'='*80}")
+        print("\nSAVING RESULTS")
         
         # Save model
         model_file = output_dir / f"{descriptor}_{model}_model.pkl"
@@ -379,9 +357,7 @@ Input CSV format (both train and test):
         end_time = datetime.now()
         duration = end_time - start_time
         
-        print("\n" + "="*80)
-        print("COMPLETED SUCCESSFULLY!")
-        print("="*80)
+        print("\nCOMPLETED SUCCESSFULLY!")
         print(f"Duration: {duration}")
         print(f"\nOutput directory: {args.output}")
         print(f"  Files created:")
@@ -396,9 +372,7 @@ Input CSV format (both train and test):
         print(f"  Accuracy: {test_metrics['Accuracy']:.4f}")
         
     except Exception as e:
-        print(f"\n{'='*80}")
-        print(f" ERROR: {e}")
-        print(f"{'='*80}")
+        print(f"\nERROR: {e}")
         import traceback
         traceback.print_exc()
         raise

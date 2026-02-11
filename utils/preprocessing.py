@@ -346,9 +346,7 @@ def preprocess_dataset(input_df: pd.DataFrame,
         5. Train/test split
         6. Calculate similarities
     """
-    print("="*80)
     print("MOLECULAR DATA PREPROCESSING PIPELINE")
-    print("="*80)
     
     stats = {}
     df = input_df.copy()
@@ -419,9 +417,7 @@ def preprocess_dataset(input_df: pd.DataFrame,
     stats['mean_similarity'] = float(similarities.mean())
     stats['median_similarity'] = float(np.median(similarities))
     
-    print("\n" + "="*80)
-    print("PREPROCESSING COMPLETED")
-    print("="*80)
+    print("\nPREPROCESSING COMPLETED")
     print(f"Final train size: {len(train_df)}")
     print(f"Final test size: {len(test_df)}")
     print(f"Mean Tanimoto similarity: {similarities.mean():.3f}")
