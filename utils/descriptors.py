@@ -20,6 +20,7 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
+from tqdm import tqdm
 
 from rdkit import Chem, DataStructs
 from rdkit.Chem import rdFingerprintGenerator, MACCSkeys
@@ -258,57 +259,57 @@ class DescriptorGenerator:
         mols, _ = self.smiles_to_mols(smiles_list)
         
         fps = []
-        for mol in mols:
+        for mol in tqdm(mols, desc="    Morgan FPs", leave=False):
             arr = np.zeros(self.morgan_nbits, dtype=np.int8)
             fp = self.morgan_gen.GetFingerprint(mol)
             DataStructs.ConvertToNumpyArray(fp, arr)
             fps.append(arr)
-        
+
         return np.array(fps)
-    
+
     # ========================================================================
     # RDKit Fingerprints
     # ========================================================================
-    
+
     def generate_rdkit(self, smiles_list):
         """
         Generate RDKit fingerprints.
-        
+
         Args:
             smiles_list: List of SMILES strings
-            
+
         Returns:
             numpy array of shape (n_molecules, n_bits)
         """
         mols, _ = self.smiles_to_mols(smiles_list)
-        
+
         fps = []
-        for mol in mols:
+        for mol in tqdm(mols, desc="    RDKit FPs", leave=False):
             arr = np.zeros(self.morgan_nbits, dtype=np.int8)
             fp = self.rdkit_gen.GetFingerprint(mol)
             DataStructs.ConvertToNumpyArray(fp, arr)
             fps.append(arr)
-        
+
         return np.array(fps)
-    
+
     # ========================================================================
     # MACCS Keys
     # ========================================================================
-    
+
     def generate_maccs(self, smiles_list):
         """
         Generate MACCS keys fingerprints.
-        
+
         Args:
             smiles_list: List of SMILES strings
-            
+
         Returns:
             numpy array of shape (n_molecules, 166)
         """
         mols, _ = self.smiles_to_mols(smiles_list)
-        
+
         fps = []
-        for mol in mols:
+        for mol in tqdm(mols, desc="    MACCS keys", leave=False):
             arr = np.zeros(166, dtype=np.int8)
             fp = MACCSkeys.GenMACCSKeys(mol)
             tmp = np.zeros(167, dtype=np.int8)
@@ -384,34 +385,35 @@ class DescriptorGenerator:
             self.chemberta_model.eval()
         
         embeddings = []
-        
+        n_batches = (len(smiles_list) + batch_size - 1) // batch_size
+
         with torch.no_grad():
-            for i in range(0, len(smiles_list), batch_size):
+            for i in tqdm(range(0, len(smiles_list), batch_size), total=n_batches, desc="    ChemBERTa", leave=False):
                 batch = smiles_list[i:i+batch_size]
-                
+
                 inputs = self.chemberta_tokenizer(
                     batch, return_tensors="pt", padding=True,
                     truncation=True, max_length=512
                 ).to(self.device)
-                
+
                 outputs = self.chemberta_model(**inputs)
                 batch_emb = outputs.last_hidden_state[:, 0, :].cpu().numpy()
                 embeddings.extend(batch_emb)
-        
+
         return np.array(embeddings)
-    
+
     # ========================================================================
     # MolFormer Embeddings
     # ========================================================================
-    
+
     def generate_molformer(self, smiles_list, batch_size=32):
         """
         Generate MolFormer embeddings.
-        
+
         Args:
             smiles_list: List of SMILES strings
             batch_size: Batch size for inference
-            
+
         Returns:
             numpy array of shape (n_molecules, 768)
         """
@@ -422,19 +424,20 @@ class DescriptorGenerator:
             self.molformer_model = AutoModel.from_pretrained("ibm/MoLFormer-XL-both-10pct", deterministic_eval=True, trust_remote_code=True)
             self.molformer_model.to(self.device)
             self.molformer_model.eval()
-        
+
         # Generate embeddings
         embeddings = []
-        
+        n_batches = (len(smiles_list) + batch_size - 1) // batch_size
+
         with torch.no_grad():
-            for i in range(0, len(smiles_list), batch_size):
+            for i in tqdm(range(0, len(smiles_list), batch_size), total=n_batches, desc="    MolFormer", leave=False):
                 batch = smiles_list[i:i+batch_size]
-                
+
                 inputs = self.molformer_tokenizer(
                     batch, return_tensors="pt", padding=True,
                     truncation=True, max_length=512
                 ).to(self.device)
-                
+
                 outputs = self.molformer_model(**inputs)
                 batch_emb = outputs.last_hidden_state[:, 0, :].cpu().numpy()
                 embeddings.extend(batch_emb)
