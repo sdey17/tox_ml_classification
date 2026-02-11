@@ -445,7 +445,6 @@ class Visualizer:
         )
         
         return save_path
-        return save_path
     
     def plot_boxplot(self, df, descriptor, metric, model_order=None):
         """
