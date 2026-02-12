@@ -7,6 +7,7 @@ A comprehensive machine learning pipeline for general toxicity prediction with s
 - **6 Molecular Descriptors**: Morgan, MACCS, RDKit, Mordred, ChemBERTa, MolFormer
 - **8 ML Models**: KNN, SVM, Bayesian, Logistic Regression, Random Forest, LightGBM, XGBoost, TabPFN
 - **Hyperparameter Optimization**: Optuna-based tuning per model-descriptor pair (configurable)
+- **Stacking Ensemble**: Combine top-K model-descriptor pairs via stacking with a meta-learner
 - **Rigorous Cross-Validation**: 5-repeat × 5-fold stratified CV (configurable)
 - **Descriptor Caching**: Automatic caching of computed descriptors for faster re-runs
 
@@ -16,6 +17,7 @@ A comprehensive machine learning pipeline for general toxicity prediction with s
 - [Quick Start](#quick-start)
 - [Configuration](#configuration)
 - [Hyperparameter Optimization](#hyperparameter-optimization)
+- [Stacking Ensemble](#stacking-ensemble)
 - [Input Format](#input-format)
 - [Output](#output)
 - [Examples](#examples)
@@ -124,6 +126,32 @@ final_model/
 └── descriptor_cache/            # Cached descriptors
 ```
 
+### Step 3: Stacking Ensemble (Optional)
+
+Instead of using a single best model, combine the top-K performers into a stacking ensemble:
+
+```bash
+python train_test_best_model.py \
+    --train data/train_df.csv \
+    --test data/test_df.csv \
+    --results cv_results/ \
+    --ensemble --top-k 5 \
+    --hyperparams cv_results/optimized_hyperparameters.json \
+    --output ensemble_model/
+```
+
+This selects the top 5 model-descriptor combinations by CV performance, generates out-of-fold predictions, trains a Logistic Regression meta-learner, and evaluates on the test set.
+
+**Output:**
+```
+ensemble_model/
+├── stacking_ensemble.pkl           # Full ensemble (base models + meta-learner)
+├── ensemble_metadata.json          # Base model configs and selection info
+├── ensemble_test_predictions.csv   # Per-molecule predictions
+├── ensemble_test_metrics.csv       # Test set metrics
+└── descriptor_cache/               # Cached descriptors
+```
+
 ## Configuration
 
 ### Edit `Config` Class in `pipeline.py`
@@ -222,6 +250,35 @@ The pipeline uses [Optuna](https://optuna.org/) for automatic hyperparameter tun
 
 **To disable Optuna** and use default hyperparameters, set `ENABLE_OPTUNA = False` in the Config class.
 
+## Stacking Ensemble
+
+The stacking ensemble combines predictions from multiple model-descriptor pairs to improve generalization, especially when different descriptors capture complementary molecular properties.
+
+**How it works:**
+1. Select top K model-descriptor combinations from `results_summary.csv` by CV metric
+2. For each base model, generate **out-of-fold (OOF) predictions** on training data using 5-fold CV
+3. Train a **Logistic Regression meta-learner** on the stacked OOF predictions
+4. Retrain all base models on the **full training data**
+5. On the test set: each base model predicts probabilities, which are fed to the meta-learner for the final prediction
+
+**Why this works well here:**
+- Different descriptors (fingerprints vs. physicochemical vs. transformer embeddings) capture different aspects of molecular structure
+- The meta-learner learns optimal weights for each base model's predictions
+- OOF predictions prevent information leakage during meta-learner training
+
+**Usage:**
+```bash
+# Top 5 models (default)
+python train_test_best_model.py \
+    --train train.csv --test test.csv \
+    --results cv_results/ --ensemble --top-k 5 --output ensemble/
+
+# Top 3 models, ranked by MCC
+python train_test_best_model.py \
+    --train train.csv --test test.csv \
+    --results cv_results/ --ensemble --top-k 3 --metric MCC --output ensemble/
+```
+
 ## Input Format
 
 Input CSV must contain:
@@ -318,6 +375,7 @@ tox_ml_classification/
 │   ├── descriptors.py             # Descriptor generation
 │   ├── models.py                  # Model creation and training
 │   ├── optimization.py            # Optuna hyperparameter optimization
+│   ├── ensemble.py                # Stacking ensemble
 │   ├── stats.py                   # Statistical tests
 │   ├── plots.py                   # Visualization
 │   └── preprocessing.py           # Data preprocessing utilities
