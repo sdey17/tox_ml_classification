@@ -6,6 +6,7 @@ A comprehensive machine learning pipeline for general toxicity prediction with s
 
 - **6 Molecular Descriptors**: Morgan, MACCS, RDKit, Mordred, ChemBERTa, MolFormer
 - **8 ML Models**: KNN, SVM, Bayesian, Logistic Regression, Random Forest, LightGBM, XGBoost, TabPFN
+- **Hyperparameter Optimization**: Optuna-based tuning per model-descriptor pair (configurable)
 - **Rigorous Cross-Validation**: 5-repeat × 5-fold stratified CV (configurable)
 - **Descriptor Caching**: Automatic caching of computed descriptors for faster re-runs
 
@@ -14,6 +15,7 @@ A comprehensive machine learning pipeline for general toxicity prediction with s
 - [Installation](#installation)
 - [Quick Start](#quick-start)
 - [Configuration](#configuration)
+- [Hyperparameter Optimization](#hyperparameter-optimization)
 - [Input Format](#input-format)
 - [Output](#output)
 - [Examples](#examples)
@@ -72,15 +74,17 @@ python pipeline.py --input data/train_df.csv --output cv_results/
 **What this does:**
 - Tests all descriptor types (Morgan, Mordred, ChemBERTa, MolFormer, etc.)
 - Tests all models (KNN, SVM, XGBoost, LightGBM, RandomForest, etc.)
-- Performs 5×5 repeated stratified cross-validation
+- Optimizes hyperparameters per model-descriptor pair using Optuna (if enabled)
+- Performs 5×5 repeated stratified cross-validation with optimized hyperparameters
 - Generates comprehensive performance metrics and statistical tests
 - Creates visualizations (heatmaps, boxplots, comparison plots)
 
 **Output:**
 ```
 cv_results/
-├── results_summary.csv          # Mean performance across all combinations
-├── per_fold_results.csv         # Individual fold results (25 per combination)
+├── results_summary.csv              # Mean performance across all combinations
+├── per_fold_results.csv             # Individual fold results (25 per combination)
+├── optimized_hyperparameters.json   # Best hyperparameters from Optuna
 ├── plots/
 │   ├── heatmap_ROC_AUC.png
 │   ├── heatmap_MCC.png
@@ -90,7 +94,7 @@ cv_results/
 │   ├── Morgan_ROC_AUC_ANOVA.txt
 │   ├── Morgan_ROC_AUC_Tukey.csv
 │   └── ...
-└── descriptor_cache/            # Cached descriptors for reuse
+└── descriptor_cache/                # Cached descriptors for reuse
 ```
 ### Step 2: Train Final Model
 
@@ -103,8 +107,11 @@ python train_test_best_model.py \
     --test data/test_df.csv \
     --results cv_results/ \
     --metric ROC_AUC \
+    --hyperparams cv_results/optimized_hyperparameters.json \
     --output final_model/
 ```
+
+The `--hyperparams` flag is optional. When provided, the final model is trained using the Optuna-optimized hyperparameters. When omitted, default hyperparameters are used.
 
 **Output:**
 ```
@@ -176,13 +183,44 @@ class Config:
         'Kappa'
     ]
     
+    # Hyperparameter optimization (Optuna)
+    ENABLE_OPTUNA = True       # Set to False to skip optimization
+    OPTUNA_N_TRIALS = 50       # Number of trials per model-descriptor pair
+    OPTUNA_METRIC = 'ROC_AUC'  # Metric to optimize
+
     # Statistical tests settings
     STATS_METRICS = ['ROC_AUC', 'MCC', 'GMean']
-    
+
     # Visualization settings
     VIZ_METRICS = ['ROC_AUC', 'MCC', 'GMean']
     VIZ_DPI = 300
 ```
+
+## Hyperparameter Optimization
+
+The pipeline uses [Optuna](https://optuna.org/) for automatic hyperparameter tuning. When `ENABLE_OPTUNA = True`, Optuna runs before the final cross-validation step, optimizing each model-descriptor combination independently.
+
+**How it works:**
+1. For each (descriptor, model) pair, Optuna runs `OPTUNA_N_TRIALS` trials
+2. Each trial suggests hyperparameters from a predefined search space
+3. Trials are evaluated using the same repeated stratified CV as the main pipeline
+4. The best hyperparameters are saved to `optimized_hyperparameters.json`
+5. The final CV run uses the optimized hyperparameters
+
+**Search spaces by model:**
+
+| Model | Tuned Hyperparameters |
+|-------|----------------------|
+| KNN | `n_neighbors` |
+| SVM | `C`, `kernel` |
+| Bayesian | `alpha` |
+| LogisticRegression | `C`, `solver` |
+| RandomForest | `n_estimators`, `max_depth`, `min_samples_split`, `min_samples_leaf`, `max_features` |
+| LightGBM | `n_estimators`, `learning_rate`, `max_depth`, `num_leaves`, `lambda_l1`, `lambda_l2` |
+| XGBoost | `n_estimators`, `learning_rate`, `max_depth`, `subsample`, `colsample_bytree`, `min_child_weight` |
+| TabPFN | Skipped (pre-trained, no tunable hyperparameters) |
+
+**To disable Optuna** and use default hyperparameters, set `ENABLE_OPTUNA = False` in the Config class.
 
 ## Input Format
 
@@ -270,15 +308,19 @@ python pipeline.py --input data/train_df.csv --output new_models_results/
 ## Repository Structure
 
 ```
-toxicity-pipeline/
-├── pipeline.py                    # Main CV pipeline
-├── train_test_best_model.py       # Train final model
-├── utils_descriptors.py           # Descriptor generation
-├── utils_models.py                # Model creation and training
-├── utils_stats.py                 # Statistical tests
-├── utils_plots.py                 # Visualization
+tox_ml_classification/
+├── pipeline.py                    # Main CV pipeline (with Optuna integration)
+├── train_test_best_model.py       # Train final model on test set
+├── preprocess_data.py             # Data preprocessing and splitting
 ├── requirements.txt               # Dependencies
 ├── README.md                      # This file
+├── utils/
+│   ├── descriptors.py             # Descriptor generation
+│   ├── models.py                  # Model creation and training
+│   ├── optimization.py            # Optuna hyperparameter optimization
+│   ├── stats.py                   # Statistical tests
+│   ├── plots.py                   # Visualization
+│   └── preprocessing.py           # Data preprocessing utilities
 └── data/
     ├── train_df.csv
     └── test_df.csv
@@ -298,13 +340,15 @@ toxicity-pipeline/
 ### Machine Learning Models
 
 - **KNN**: k=5 neighbors
-- **SVM**: RBF kernel with class weights
+- **SVM**: RBF kernel, balanced class weights
 - **Bayesian**: Bernoulli Naive Bayes
-- **LogisticRegression**: L2 regularization, class weights
-- **RandomForest**: 100 trees, class weights
-- **LightGBM**: Gradient boosting
-- **XGBoost**: Gradient boosting with scale_pos_weight
+- **LogisticRegression**: L2 regularization, balanced class weights
+- **RandomForest**: 500 trees, balanced class weights
+- **LightGBM**: Gradient boosting, 500 estimators
+- **XGBoost**: Gradient boosting, 500 estimators, histogram tree method
 - **TabPFN**: Transformer-based prior-fitted network
+
+All model defaults can be overridden by Optuna when `ENABLE_OPTUNA = True`.
 
 ### Cross-Validation
 
