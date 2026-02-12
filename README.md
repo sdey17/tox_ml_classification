@@ -140,16 +140,21 @@ python train_test_best_model.py \
     --output ensemble_model/
 ```
 
-This selects the top 5 model-descriptor combinations by CV performance, generates out-of-fold predictions, trains a Logistic Regression meta-learner, and evaluates on the test set.
+This selects the top 5 model-descriptor combinations by CV performance, generates out-of-fold predictions, trains a Logistic Regression meta-learner, and evaluates on the test set. It also automatically trains the single best model from CV and prints a side-by-side comparison so you can check whether the ensemble improves over the best individual model.
 
 **Output:**
 ```
 ensemble_model/
-├── stacking_ensemble.pkl           # Full ensemble (base models + meta-learner)
-├── ensemble_metadata.json          # Base model configs and selection info
-├── ensemble_test_predictions.csv   # Per-molecule predictions
-├── ensemble_test_metrics.csv       # Test set metrics
-└── descriptor_cache/               # Cached descriptors
+├── stacking_ensemble.pkl                    # Full ensemble (base models + meta-learner)
+├── ensemble_metadata.json                   # Base model configs and selection info
+├── ensemble_test_predictions.csv            # Ensemble per-molecule predictions
+├── ensemble_test_metrics.csv                # Ensemble test set metrics
+├── Morgan_XGBoost_model.pkl                 # Best single model (auto-selected)
+├── Morgan_XGBoost_scaler.pkl                # Best single model scaler
+├── best_model_test_predictions.csv          # Best single model predictions
+├── best_model_test_metrics.csv              # Best single model metrics
+├── ensemble_vs_best_model_comparison.csv    # Side-by-side metric comparison
+└── descriptor_cache/                        # Cached descriptors
 ```
 
 ## Configuration

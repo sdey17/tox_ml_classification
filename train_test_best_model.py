@@ -331,22 +331,128 @@ def _run_ensemble(args, output_dir, train_smiles, y_train,
     metrics_df.to_csv(metrics_file, index=False)
     print(f"  Test metrics: {metrics_file.name}")
 
+    # ----------------------------------------------------------------
+    # Also train/evaluate the single best model for comparison
+    # ----------------------------------------------------------------
+    print("\n" + "=" * 60)
+    print("BEST SINGLE MODEL (for comparison)")
+    print("=" * 60)
+
+    best_descriptor, best_model = find_best_model(args.results, args.metric)
+
+    # Reuse descriptors from the ensemble's cache
+    X_train_best = ensemble.descriptors_train.get(best_descriptor)
+    X_test_best = ensemble.descriptors_test.get(best_descriptor)
+
+    if X_train_best is None:
+        # Descriptor wasn't in the ensemble's top-K; generate it
+        X_train_best, X_test_best = ensemble._generate_descriptors(
+            best_descriptor, train_smiles, test_smiles
+        )
+
+    # Scale if needed
+    if best_descriptor.lower() == 'mordred':
+        best_scaler = MinMaxScaler()
+        X_train_best_scaled = best_scaler.fit_transform(X_train_best)
+        X_test_best_scaled = best_scaler.transform(X_test_best)
+    else:
+        best_scaler = None
+        X_train_best_scaled = X_train_best
+        X_test_best_scaled = X_test_best
+
+    # Load hyperparameters for the best model
+    best_params = hyperparams.get(f"{best_descriptor}_{best_model}", {})
+    if best_params:
+        print(f"  Using optimized hyperparameters: {best_params}")
+
+    clf = ModelFactory.create(best_model, **best_params)
+    clf.fit(X_train_best_scaled, y_train)
+
+    y_best_pred = clf.predict(X_test_best_scaled)
+    y_best_proba = clf.predict_proba(X_test_best_scaled)[:, 1]
+    best_metrics = calculate_metrics(y_test, y_best_pred, y_best_proba)
+
+    print(f"\nBEST SINGLE MODEL TEST PERFORMANCE ({best_descriptor} + {best_model})")
+    for metric_name, value in best_metrics.items():
+        if isinstance(value, float):
+            print(f"  {metric_name}: {value:.4f}")
+
+    # Save best single model artifacts
+    best_model_file = output_dir / f"{best_descriptor}_{best_model}_model.pkl"
+    joblib.dump(clf, best_model_file)
+    best_scaler_file = output_dir / f"{best_descriptor}_{best_model}_scaler.pkl"
+    joblib.dump(best_scaler, best_scaler_file)
+
+    best_pred_df = pd.DataFrame({
+        'SMILES': test_smiles,
+        'True_Label': y_test,
+        'Predicted_Label': y_best_pred,
+        'Predicted_Probability': y_best_proba,
+        'Prediction': ['Toxic' if p == 1 else 'Non-toxic' for p in y_best_pred]
+    })
+    best_pred_file = output_dir / 'best_model_test_predictions.csv'
+    best_pred_df.to_csv(best_pred_file, index=False)
+
+    best_metrics_df = pd.DataFrame({
+        'Metric': list(best_metrics.keys()),
+        'Value': list(best_metrics.values())
+    })
+    best_metrics_file = output_dir / 'best_model_test_metrics.csv'
+    best_metrics_df.to_csv(best_metrics_file, index=False)
+
+    # ----------------------------------------------------------------
+    # Side-by-side comparison
+    # ----------------------------------------------------------------
+    print("\n" + "=" * 60)
+    print("COMPARISON: ENSEMBLE vs BEST SINGLE MODEL")
+    print("=" * 60)
+    print(f"  {'Metric':<20} {'Ensemble':>12} {best_descriptor + ' + ' + best_model:>25} {'Diff':>10}")
+    print(f"  {'-'*20} {'-'*12} {'-'*25} {'-'*10}")
+
+    for metric_name in test_metrics:
+        ens_val = test_metrics[metric_name]
+        best_val = best_metrics[metric_name]
+        if isinstance(ens_val, float) and isinstance(best_val, float):
+            diff = ens_val - best_val
+            sign = '+' if diff >= 0 else ''
+            print(f"  {metric_name:<20} {ens_val:>12.4f} {best_val:>25.4f} {sign}{diff:>9.4f}")
+
+    # Save comparison CSV
+    comparison_rows = []
+    for metric_name in test_metrics:
+        ens_val = test_metrics[metric_name]
+        best_val = best_metrics[metric_name]
+        if isinstance(ens_val, float) and isinstance(best_val, float):
+            comparison_rows.append({
+                'Metric': metric_name,
+                'Ensemble': ens_val,
+                f'{best_descriptor}_{best_model}': best_val,
+                'Difference': ens_val - best_val,
+            })
+    comparison_df = pd.DataFrame(comparison_rows)
+    comparison_file = output_dir / 'ensemble_vs_best_model_comparison.csv'
+    comparison_df.to_csv(comparison_file, index=False)
+    print(f"\n  Comparison saved: {comparison_file.name}")
+
     # Summary
     end_time = datetime.now()
     duration = end_time - start_time
 
-    print("\nENSEMBLE COMPLETED SUCCESSFULLY!")
+    print("\nCOMPLETED SUCCESSFULLY!")
     print(f"Duration: {duration}")
     print(f"\nOutput directory: {args.output}")
-    print(f"  Files created:")
+    print(f"  Ensemble files:")
     print(f"    - {ensemble_file.name}")
     print(f"    - {metadata_file.name}")
     print(f"    - {pred_file.name}")
     print(f"    - {metrics_file.name}")
-    print(f"\nEnsemble test set performance:")
-    print(f"  ROC-AUC: {test_metrics['ROC_AUC']:.4f}")
-    print(f"  MCC: {test_metrics['MCC']:.4f}")
-    print(f"  Accuracy: {test_metrics['Accuracy']:.4f}")
+    print(f"  Best single model files:")
+    print(f"    - {best_model_file.name}")
+    print(f"    - {best_scaler_file.name}")
+    print(f"    - {best_pred_file.name}")
+    print(f"    - {best_metrics_file.name}")
+    print(f"  Comparison:")
+    print(f"    - {comparison_file.name}")
 
 
 def _run_single_model(args, output_dir, train_smiles, y_train,
