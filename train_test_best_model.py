@@ -24,9 +24,7 @@ import pandas as pd
 import joblib
 from tqdm import tqdm
 from rdkit import Chem
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
-from sklearn.metrics import (accuracy_score, precision_score, recall_score,
-                              roc_auc_score, matthews_corrcoef, confusion_matrix)
+from sklearn.preprocessing import MinMaxScaler
 
 from utils.descriptors import DescriptorGenerator
 from utils.models import ModelFactory, calculate_metrics
