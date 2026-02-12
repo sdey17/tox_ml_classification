@@ -58,64 +58,83 @@ class ModelFactory:
                         'LightGBM', 'XGBoost', 'TabPFN']
     
     @staticmethod
-    def create_knn(n_neighbors=5, **kwargs):
+    def create_knn(**kwargs):
         """Create K-Nearest Neighbors classifier."""
-        return KNeighborsClassifier(n_neighbors=n_neighbors)
-    
+        defaults = {'n_neighbors': 5}
+        params = {**defaults, **kwargs}
+        return KNeighborsClassifier(**params)
+
     @staticmethod
-    def create_svm(kernel='rbf', random_state=42, **kwargs):
+    def create_svm(random_state=42, **kwargs):
         """Create Support Vector Machine classifier."""
-        return SVC(kernel=kernel, probability=True, class_weight='balanced', random_state=random_state)
-    
+        defaults = {
+            'kernel': 'rbf',
+            'probability': True,
+            'class_weight': 'balanced',
+            'random_state': random_state,
+        }
+        params = {**defaults, **kwargs}
+        return SVC(**params)
+
     @staticmethod
-    def create_bayesian(alpha=1.0, **kwargs):
+    def create_bayesian(**kwargs):
         """Create Bayesian (BernoulliNB) classifier."""
-        return BernoulliNB(alpha=alpha)
-    
+        defaults = {'alpha': 1.0}
+        params = {**defaults, **kwargs}
+        return BernoulliNB(**params)
+
     @staticmethod
-    def create_logistic_regression(max_iter=2000, random_state=42, **kwargs):
+    def create_logistic_regression(random_state=42, **kwargs):
         """Create Logistic Regression classifier."""
-        return LogisticRegression(
-            max_iter=max_iter,
-            class_weight='balanced',
-            random_state=random_state
-        )
-    
+        defaults = {
+            'max_iter': 2000,
+            'class_weight': 'balanced',
+            'random_state': random_state,
+        }
+        params = {**defaults, **kwargs}
+        return LogisticRegression(**params)
+
     @staticmethod
-    def create_random_forest(n_estimators=500, random_state=42, **kwargs):
+    def create_random_forest(random_state=42, **kwargs):
         """Create Random Forest classifier."""
-        return RandomForestClassifier(
-            n_estimators=n_estimators,
-            class_weight='balanced',
-            n_jobs=-1,
-            random_state=random_state
-        )
-    
+        defaults = {
+            'n_estimators': 500,
+            'class_weight': 'balanced',
+            'n_jobs': -1,
+            'random_state': random_state,
+        }
+        params = {**defaults, **kwargs}
+        return RandomForestClassifier(**params)
+
     @staticmethod
-    def create_lightgbm(n_estimators=500, random_state=42, **kwargs):
+    def create_lightgbm(random_state=42, **kwargs):
         """Create LightGBM classifier."""
-        return lgb.LGBMClassifier(
-            n_estimators=n_estimators,
-            random_state=random_state,
-            n_jobs=-1,
-            verbose=-1
-        )
-    
+        defaults = {
+            'n_estimators': 500,
+            'random_state': random_state,
+            'n_jobs': -1,
+            'verbose': -1,
+        }
+        params = {**defaults, **kwargs}
+        return lgb.LGBMClassifier(**params)
+
     @staticmethod
-    def create_xgboost(n_estimators=500, random_state=42, **kwargs):
+    def create_xgboost(random_state=42, **kwargs):
         """Create XGBoost classifier."""
-        return XGBClassifier(
-            n_estimators=n_estimators,
-            learning_rate=0.1,
-            max_depth=6,
-            subsample=0.8,
-            colsample_bytree=0.8,
-            eval_metric="logloss",
-            random_state=random_state,
-            n_jobs=-1,
-            tree_method="hist"
-        )
-    
+        defaults = {
+            'n_estimators': 500,
+            'learning_rate': 0.1,
+            'max_depth': 6,
+            'subsample': 0.8,
+            'colsample_bytree': 0.8,
+            'eval_metric': 'logloss',
+            'random_state': random_state,
+            'n_jobs': -1,
+            'tree_method': 'hist',
+        }
+        params = {**defaults, **kwargs}
+        return XGBClassifier(**params)
+
     @staticmethod
     def create_tabpfn(device='cpu', random_state=42, **kwargs):
         """Create TabPFN classifier."""
@@ -230,19 +249,22 @@ class CrossValidator:
         self.random_state = random_state
         self.device = DEVICE
     
-    def run_cv(self, X, y, model_name, descriptor_name):
+    def run_cv(self, X, y, model_name, descriptor_name, model_params=None):
         """
         Run repeated stratified K-fold CV.
-        
+
         Args:
             X: Feature matrix
             y: Labels
             model_name: Name of model to train
             descriptor_name: Name of descriptor (for recording)
-            
+            model_params: Optional dict of hyperparameters to pass to ModelFactory
+
         Returns:
             List of dictionaries with per-fold results
         """
+        if model_params is None:
+            model_params = {}
 
         results = []
 
@@ -271,7 +293,10 @@ class CrossValidator:
 
                 # Train and evaluate
                 try:
-                    model = ModelFactory.create(model_name, random_state=seed, device=self.device)
+                    model = ModelFactory.create(
+                        model_name, random_state=seed,
+                        device=self.device, **model_params
+                    )
                     model.fit(X_train, y_train)
 
                     # Predictions
