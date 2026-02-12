@@ -24,12 +24,11 @@ import pandas as pd
 import joblib
 from tqdm import tqdm
 from rdkit import Chem
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
-from sklearn.metrics import (accuracy_score, precision_score, recall_score,
-                              roc_auc_score, matthews_corrcoef, confusion_matrix)
+from sklearn.preprocessing import MinMaxScaler
 
 from utils.descriptors import DescriptorGenerator
 from utils.models import ModelFactory, calculate_metrics
+from utils.ensemble import StackingEnsemble, select_top_k
 
 warnings.filterwarnings('ignore')
 
@@ -120,26 +119,26 @@ def main():
         epilog="""
 Examples:
     # Auto-select best model from CV results
-    python train_and_test.py \\
+    python train_test_best_model.py \\
         --train train.csv \\
         --test test.csv \\
         --results cv_results/ \\
         --output final_model/
-    
+
     # Manual model/descriptor selection
-    python train_and_test.py \\
+    python train_test_best_model.py \\
         --train train.csv \\
         --test test.csv \\
         --descriptor Morgan \\
         --model XGBoost \\
         --output final_model/
-    
-    # Use different metric for best model selection
-    python train_and_test.py \\
+
+    # Stacking ensemble of top 5 models
+    python train_test_best_model.py \\
         --train train.csv \\
         --test test.csv \\
         --results cv_results/ \\
-        --metric MCC \\
+        --ensemble --top-k 5 \\
         --output final_model/
 
 Input CSV format (both train and test):
@@ -173,10 +172,18 @@ Input CSV format (both train and test):
                         help='Metric for best model selection (default: ROC_AUC)')
     parser.add_argument('--hyperparams',
                         help='Path to optimized_hyperparameters.json from Optuna')
-    
+
+    # Ensemble options
+    parser.add_argument('--ensemble', action='store_true',
+                        help='Use stacking ensemble of top-K models (requires --results)')
+    parser.add_argument('--top-k', type=int, default=5,
+                        help='Number of top models for ensemble (default: 5)')
+
     args = parser.parse_args()
-    
+
     # Validate
+    if args.ensemble and not args.results:
+        parser.error("--ensemble requires --results")
     if args.descriptor and not args.model:
         parser.error("--model required with --descriptor")
     if args.model and not args.descriptor:
@@ -184,217 +191,331 @@ Input CSV format (both train and test):
     
     start_time = datetime.now()
     
-    print("\nTRAIN FINAL MODEL AND EVALUATE ON TEST SET")
+    if args.ensemble:
+        print("\nSTACKING ENSEMBLE: TRAIN AND EVALUATE")
+    else:
+        print("\nTRAIN FINAL MODEL AND EVALUATE ON TEST SET")
     print(f"Started: {start_time:%Y-%m-%d %H:%M:%S}")
-    
+
     try:
-        # ====================================================================
-        # 1. DETERMINE MODEL/DESCRIPTOR
-        # ====================================================================
-        if args.results:
-            descriptor, model = find_best_model(args.results, args.metric)
-        else:
-            descriptor = args.descriptor
-            model = args.model
-            print("\nMODEL SELECTION")
-            print(f"  Descriptor: {descriptor}")
-            print(f"  Model: {model}")
-        
-        # ====================================================================
-        # 2. LOAD DATA
-        # ====================================================================
-        train_smiles, y_train = load_and_validate_data(args.train, "Training Data")
-        test_smiles, y_test = load_and_validate_data(args.test, "Test Data")
-        
-        # ====================================================================
-        # 3. INITIALIZE DESCRIPTOR GENERATOR (once, with caching)
-        # ====================================================================
         output_dir = Path(args.output)
         output_dir.mkdir(parents=True, exist_ok=True)
-        cache_dir = output_dir / 'descriptor_cache'
-        
-        print("\nINITIALIZING DESCRIPTOR GENERATOR")
-        desc_gen = DescriptorGenerator(cache_dir=cache_dir)
-        print(f"  Descriptor type: {descriptor}")
-        print(f"  Cache directory: {cache_dir}")
-        
 
-        # ====================================================================
-        # 4. GENERATE DESCRIPTORS (TRAIN + TEST COMBINED)
-        # ====================================================================
-        print("\nGENERATING DESCRIPTORS")
-        
-        # Combine SMILES to ensure consistent feature space
-        print(f"\nCombining train and test data for descriptor generation...")
-        all_smiles = train_smiles + test_smiles
-        print(f"  Total molecules: {len(all_smiles)}")
-        
-        # Generate descriptors on ALL data
-        print(f"Generating {descriptor} descriptors...")
-        X_all = desc_gen.generate(descriptor, all_smiles)
-        print(f"  Combined shape: {X_all.shape}")
-        
-        # Split back into train/test
-        n_train = len(train_smiles)
-        X_train = X_all[:n_train]
-        X_test = X_all[n_train:]
-        print(f"  Train shape: {X_train.shape}")
-        print(f"  Test shape: {X_test.shape}")
+        # Load data (shared by both paths)
+        train_smiles, y_train = load_and_validate_data(args.train, "Training Data")
+        test_smiles, y_test = load_and_validate_data(args.test, "Test Data")
 
-
-        # ====================================================================
-        # 5. TRAIN MODEL
-        # ====================================================================
-        print("\nTRAINING MODEL ON ALL TRAINING DATA")
-
-        # Scale (only Mordred, only on train data)
-        if descriptor.lower() == 'mordred':
-            print(f"\nUsing MinMaxScaler for {descriptor}")
-            scaler = MinMaxScaler()
-            X_train_scaled = scaler.fit_transform(X_train)
-            X_test_scaled = scaler.transform(X_test)
+        if args.ensemble:
+            _run_ensemble(args, output_dir, train_smiles, y_train,
+                          test_smiles, y_test, start_time)
         else:
-            print(f"\nNo scaling for {descriptor} (already normalized)")
-            scaler = None
-            X_train_scaled = X_train
-            X_test_scaled = X_test
-        
-        # Load optimized hyperparameters if provided
-        model_params = {}
-        if args.hyperparams:
-            hp_path = Path(args.hyperparams)
-            if hp_path.exists():
-                with open(hp_path) as f:
-                    all_params = json.load(f)
-                key = f"{descriptor}_{model}"
-                model_params = all_params.get(key, {})
-                if model_params:
-                    print(f"\nUsing optimized hyperparameters: {model_params}")
-                else:
-                    print(f"\nNo optimized params found for {key}, using defaults")
-            else:
-                print(f"\nHyperparams file not found: {hp_path}, using defaults")
+            _run_single_model(args, output_dir, train_smiles, y_train,
+                              test_smiles, y_test, start_time)
 
-        # Create model using ModelFactory
-        print(f"\nCreating {model} model...")
-        clf = ModelFactory.create(model, **model_params)
-        
-        # Train
-        print(f"Training on {len(y_train)} samples...")
-        clf.fit(X_train_scaled, y_train)
-        print(" Training complete")
-        
-        # Training metrics
-        y_train_pred = clf.predict(X_train_scaled)
-        y_train_proba = clf.predict_proba(X_train_scaled)[:, 1]
-        train_metrics = calculate_metrics(y_train, y_train_pred, y_train_proba)
-        
-        print("\nTRAINING SET PERFORMANCE")
-        for metric, value in train_metrics.items():
-            if isinstance(value, float):
-                print(f"  {metric}: {value:.4f}")
-            else:
-                print(f"  {metric}: {value}")
-        
-        # ====================================================================
-        # 6. EVALUATE ON TEST SET
-        # ====================================================================
-        print("\nEVALUATING ON TEST SET")
-        
-        # X_test_scaled was already created in section 5
-        y_test_pred = clf.predict(X_test_scaled)
-        y_test_proba = clf.predict_proba(X_test_scaled)[:, 1]
-        
-        # Calculate metrics
-        test_metrics = calculate_metrics(y_test, y_test_pred, y_test_proba)
-        
-        print("\nTEST SET PERFORMANCE")
-        for metric, value in test_metrics.items():
-            if isinstance(value, float):
-                print(f"  {metric}: {value:.4f}")
-            else:
-                print(f"  {metric}: {value}")
-        
-        # ====================================================================
-        # 7. SAVE EVERYTHING
-        # ====================================================================
-        print("\nSAVING RESULTS")
-        
-        # Save model
-        model_file = output_dir / f"{descriptor}_{model}_model.pkl"
-        joblib.dump(clf, model_file)
-        print(f" Model: {model_file.name}")
-        
-        # Save scaler
-        scaler_file = output_dir / f"{descriptor}_{model}_scaler.pkl"
-        joblib.dump(scaler, scaler_file)
-        print(f" Scaler: {scaler_file.name}")
-        
-        # Save metadata
-        metadata = {
-            'descriptor': descriptor,
-            'model': model,
-            'scaler_type': 'MinMaxScaler' if descriptor.lower() == 'mordred' else 'None',
-            'hyperparameters': model_params if model_params else 'defaults',
-            'timestamp': datetime.now().isoformat(),
-            'model_file': model_file.name,
-            'scaler_file': scaler_file.name,
-            'training_samples': len(y_train),
-            'test_samples': len(y_test),
-            'feature_dim': X_train.shape[1]
-        }
-        
-        metadata_file = output_dir / 'model_metadata.json'
-        with open(metadata_file, 'w') as f:
-            json.dump(metadata, f, indent=2)
-        print(f" Metadata: {metadata_file.name}")
-        
-        # Save test predictions
-        pred_df = pd.DataFrame({
-            'SMILES': test_smiles,
-            'True_Label': y_test,
-            'Predicted_Label': y_test_pred,
-            'Predicted_Probability': y_test_proba,
-            'Prediction': ['Toxic' if p == 1 else 'Non-toxic' for p in y_test_pred]
-        })
-        pred_file = output_dir / 'test_predictions.csv'
-        pred_df.to_csv(pred_file, index=False)
-        print(f" Test predictions: {pred_file.name}")
-        
-        # Save test metrics
-        metrics_df = pd.DataFrame({
-            'Metric': list(test_metrics.keys()),
-            'Value': list(test_metrics.values())
-        })
-        metrics_file = output_dir / 'test_metrics.csv'
-        metrics_df.to_csv(metrics_file, index=False)
-        print(f" Test metrics: {metrics_file.name}")
-        
-        # ====================================================================
-        # 8. SUMMARY
-        # ====================================================================
-        end_time = datetime.now()
-        duration = end_time - start_time
-        
-        print("\nCOMPLETED SUCCESSFULLY!")
-        print(f"Duration: {duration}")
-        print(f"\nOutput directory: {args.output}")
-        print(f"  Files created:")
-        print(f"    - {model_file.name}")
-        print(f"    - {scaler_file.name}")
-        print(f"    - {metadata_file.name}")
-        print(f"    - {pred_file.name}")
-        print(f"    - {metrics_file.name}")
-        print(f"\nTest set performance:")
-        print(f"  ROC-AUC: {test_metrics['ROC_AUC']:.4f}")
-        print(f"  MCC: {test_metrics['MCC']:.4f}")
-        print(f"  Accuracy: {test_metrics['Accuracy']:.4f}")
-        
     except Exception as e:
         print(f"\nERROR: {e}")
         import traceback
         traceback.print_exc()
         raise
+
+
+def _run_ensemble(args, output_dir, train_smiles, y_train,
+                  test_smiles, y_test, start_time):
+    """Run stacking ensemble pipeline."""
+
+    # Select top K
+    top_k = select_top_k(args.results, k=args.top_k, metric=args.metric)
+
+    print(f"\nSELECTED TOP {args.top_k} MODELS (by {args.metric})")
+    for i, (desc, mdl, score) in enumerate(top_k, 1):
+        print(f"  {i}. {desc} + {mdl} ({args.metric}={score:.4f})")
+
+    base_configs = [(desc, mdl) for desc, mdl, _ in top_k]
+
+    # Load hyperparameters
+    hyperparams = {}
+    if args.hyperparams:
+        hp_path = Path(args.hyperparams)
+        if hp_path.exists():
+            with open(hp_path) as f:
+                hyperparams = json.load(f)
+            print(f"\nLoaded optimized hyperparameters from {hp_path}")
+        else:
+            print(f"\nHyperparams file not found: {hp_path}, using defaults")
+
+    # Initialize descriptor generator
+    cache_dir = output_dir / 'descriptor_cache'
+    desc_gen = DescriptorGenerator(cache_dir=cache_dir)
+
+    # Build ensemble
+    print("\nBUILDING STACKING ENSEMBLE")
+    ensemble = StackingEnsemble(
+        base_configs=base_configs,
+        desc_generator=desc_gen,
+        hyperparams=hyperparams,
+        n_folds=5,
+        random_state=42,
+    )
+
+    oof_predictions = ensemble.fit(train_smiles, y_train, test_smiles)
+
+    # OOF performance (meta-learner on training data)
+    oof_proba = ensemble.meta_learner.predict_proba(oof_predictions)[:, 1]
+    oof_pred = (oof_proba >= 0.5).astype(int)
+    oof_metrics = calculate_metrics(y_train, oof_pred, oof_proba)
+
+    print("\nENSEMBLE OOF PERFORMANCE (training data)")
+    for metric_name, value in oof_metrics.items():
+        if isinstance(value, float):
+            print(f"  {metric_name}: {value:.4f}")
+
+    # Evaluate on test set
+    print("\nEVALUATING ENSEMBLE ON TEST SET")
+    y_test_proba = ensemble.predict_proba()
+    y_test_pred = (y_test_proba >= 0.5).astype(int)
+    test_metrics = calculate_metrics(y_test, y_test_pred, y_test_proba)
+
+    print("\nENSEMBLE TEST SET PERFORMANCE")
+    for metric_name, value in test_metrics.items():
+        if isinstance(value, float):
+            print(f"  {metric_name}: {value:.4f}")
+
+    # Save
+    print("\nSAVING RESULTS")
+
+    # Save ensemble model
+    ensemble_file = output_dir / 'stacking_ensemble.pkl'
+    joblib.dump(ensemble, ensemble_file)
+    print(f"  Ensemble: {ensemble_file.name}")
+
+    # Save metadata
+    metadata = {
+        'type': 'stacking_ensemble',
+        'base_models': [
+            {'descriptor': d, 'model': m} for d, m in base_configs
+        ],
+        'meta_learner': 'LogisticRegression',
+        'top_k': args.top_k,
+        'selection_metric': args.metric,
+        'hyperparameters': {
+            f"{d}_{m}": hyperparams.get(f"{d}_{m}", 'defaults')
+            for d, m in base_configs
+        },
+        'timestamp': datetime.now().isoformat(),
+        'training_samples': len(y_train),
+        'test_samples': len(y_test),
+    }
+    metadata_file = output_dir / 'ensemble_metadata.json'
+    with open(metadata_file, 'w') as f:
+        json.dump(metadata, f, indent=2)
+    print(f"  Metadata: {metadata_file.name}")
+
+    # Save test predictions
+    pred_df = pd.DataFrame({
+        'SMILES': test_smiles,
+        'True_Label': y_test,
+        'Predicted_Label': y_test_pred,
+        'Predicted_Probability': y_test_proba,
+        'Prediction': ['Toxic' if p == 1 else 'Non-toxic' for p in y_test_pred]
+    })
+    pred_file = output_dir / 'ensemble_test_predictions.csv'
+    pred_df.to_csv(pred_file, index=False)
+    print(f"  Test predictions: {pred_file.name}")
+
+    # Save test metrics
+    metrics_df = pd.DataFrame({
+        'Metric': list(test_metrics.keys()),
+        'Value': list(test_metrics.values())
+    })
+    metrics_file = output_dir / 'ensemble_test_metrics.csv'
+    metrics_df.to_csv(metrics_file, index=False)
+    print(f"  Test metrics: {metrics_file.name}")
+
+    # Summary
+    end_time = datetime.now()
+    duration = end_time - start_time
+
+    print("\nENSEMBLE COMPLETED SUCCESSFULLY!")
+    print(f"Duration: {duration}")
+    print(f"\nOutput directory: {args.output}")
+    print(f"  Files created:")
+    print(f"    - {ensemble_file.name}")
+    print(f"    - {metadata_file.name}")
+    print(f"    - {pred_file.name}")
+    print(f"    - {metrics_file.name}")
+    print(f"\nEnsemble test set performance:")
+    print(f"  ROC-AUC: {test_metrics['ROC_AUC']:.4f}")
+    print(f"  MCC: {test_metrics['MCC']:.4f}")
+    print(f"  Accuracy: {test_metrics['Accuracy']:.4f}")
+
+
+def _run_single_model(args, output_dir, train_smiles, y_train,
+                      test_smiles, y_test, start_time):
+    """Run single model pipeline (original behavior)."""
+
+    # Determine model/descriptor
+    if args.results:
+        descriptor, model = find_best_model(args.results, args.metric)
+    else:
+        descriptor = args.descriptor
+        model = args.model
+        print("\nMODEL SELECTION")
+        print(f"  Descriptor: {descriptor}")
+        print(f"  Model: {model}")
+
+    # Initialize descriptor generator
+    cache_dir = output_dir / 'descriptor_cache'
+
+    print("\nINITIALIZING DESCRIPTOR GENERATOR")
+    desc_gen = DescriptorGenerator(cache_dir=cache_dir)
+    print(f"  Descriptor type: {descriptor}")
+    print(f"  Cache directory: {cache_dir}")
+
+    # Generate descriptors
+    print("\nGENERATING DESCRIPTORS")
+
+    print(f"\nCombining train and test data for descriptor generation...")
+    all_smiles = train_smiles + test_smiles
+    print(f"  Total molecules: {len(all_smiles)}")
+
+    print(f"Generating {descriptor} descriptors...")
+    X_all = desc_gen.generate(descriptor, all_smiles)
+    print(f"  Combined shape: {X_all.shape}")
+
+    n_train = len(train_smiles)
+    X_train = X_all[:n_train]
+    X_test = X_all[n_train:]
+    print(f"  Train shape: {X_train.shape}")
+    print(f"  Test shape: {X_test.shape}")
+
+    # Train model
+    print("\nTRAINING MODEL ON ALL TRAINING DATA")
+
+    if descriptor.lower() == 'mordred':
+        print(f"\nUsing MinMaxScaler for {descriptor}")
+        scaler = MinMaxScaler()
+        X_train_scaled = scaler.fit_transform(X_train)
+        X_test_scaled = scaler.transform(X_test)
+    else:
+        print(f"\nNo scaling for {descriptor} (already normalized)")
+        scaler = None
+        X_train_scaled = X_train
+        X_test_scaled = X_test
+
+    # Load optimized hyperparameters if provided
+    model_params = {}
+    if args.hyperparams:
+        hp_path = Path(args.hyperparams)
+        if hp_path.exists():
+            with open(hp_path) as f:
+                all_params = json.load(f)
+            key = f"{descriptor}_{model}"
+            model_params = all_params.get(key, {})
+            if model_params:
+                print(f"\nUsing optimized hyperparameters: {model_params}")
+            else:
+                print(f"\nNo optimized params found for {key}, using defaults")
+        else:
+            print(f"\nHyperparams file not found: {hp_path}, using defaults")
+
+    print(f"\nCreating {model} model...")
+    clf = ModelFactory.create(model, **model_params)
+
+    print(f"Training on {len(y_train)} samples...")
+    clf.fit(X_train_scaled, y_train)
+    print("  Training complete")
+
+    # Training metrics
+    y_train_pred = clf.predict(X_train_scaled)
+    y_train_proba = clf.predict_proba(X_train_scaled)[:, 1]
+    train_metrics = calculate_metrics(y_train, y_train_pred, y_train_proba)
+
+    print("\nTRAINING SET PERFORMANCE")
+    for metric, value in train_metrics.items():
+        if isinstance(value, float):
+            print(f"  {metric}: {value:.4f}")
+        else:
+            print(f"  {metric}: {value}")
+
+    # Evaluate on test set
+    print("\nEVALUATING ON TEST SET")
+
+    y_test_pred = clf.predict(X_test_scaled)
+    y_test_proba = clf.predict_proba(X_test_scaled)[:, 1]
+    test_metrics = calculate_metrics(y_test, y_test_pred, y_test_proba)
+
+    print("\nTEST SET PERFORMANCE")
+    for metric, value in test_metrics.items():
+        if isinstance(value, float):
+            print(f"  {metric}: {value:.4f}")
+        else:
+            print(f"  {metric}: {value}")
+
+    # Save
+    print("\nSAVING RESULTS")
+
+    model_file = output_dir / f"{descriptor}_{model}_model.pkl"
+    joblib.dump(clf, model_file)
+    print(f"  Model: {model_file.name}")
+
+    scaler_file = output_dir / f"{descriptor}_{model}_scaler.pkl"
+    joblib.dump(scaler, scaler_file)
+    print(f"  Scaler: {scaler_file.name}")
+
+    metadata = {
+        'descriptor': descriptor,
+        'model': model,
+        'scaler_type': 'MinMaxScaler' if descriptor.lower() == 'mordred' else 'None',
+        'hyperparameters': model_params if model_params else 'defaults',
+        'timestamp': datetime.now().isoformat(),
+        'model_file': model_file.name,
+        'scaler_file': scaler_file.name,
+        'training_samples': len(y_train),
+        'test_samples': len(y_test),
+        'feature_dim': X_train.shape[1]
+    }
+
+    metadata_file = output_dir / 'model_metadata.json'
+    with open(metadata_file, 'w') as f:
+        json.dump(metadata, f, indent=2)
+    print(f"  Metadata: {metadata_file.name}")
+
+    pred_df = pd.DataFrame({
+        'SMILES': test_smiles,
+        'True_Label': y_test,
+        'Predicted_Label': y_test_pred,
+        'Predicted_Probability': y_test_proba,
+        'Prediction': ['Toxic' if p == 1 else 'Non-toxic' for p in y_test_pred]
+    })
+    pred_file = output_dir / 'test_predictions.csv'
+    pred_df.to_csv(pred_file, index=False)
+    print(f"  Test predictions: {pred_file.name}")
+
+    metrics_df = pd.DataFrame({
+        'Metric': list(test_metrics.keys()),
+        'Value': list(test_metrics.values())
+    })
+    metrics_file = output_dir / 'test_metrics.csv'
+    metrics_df.to_csv(metrics_file, index=False)
+    print(f"  Test metrics: {metrics_file.name}")
+
+    # Summary
+    end_time = datetime.now()
+    duration = end_time - start_time
+
+    print("\nCOMPLETED SUCCESSFULLY!")
+    print(f"Duration: {duration}")
+    print(f"\nOutput directory: {args.output}")
+    print(f"  Files created:")
+    print(f"    - {model_file.name}")
+    print(f"    - {scaler_file.name}")
+    print(f"    - {metadata_file.name}")
+    print(f"    - {pred_file.name}")
+    print(f"    - {metrics_file.name}")
+    print(f"\nTest set performance:")
+    print(f"  ROC-AUC: {test_metrics['ROC_AUC']:.4f}")
+    print(f"  MCC: {test_metrics['MCC']:.4f}")
+    print(f"  Accuracy: {test_metrics['Accuracy']:.4f}")
 
 
 if __name__ == "__main__":
