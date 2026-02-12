@@ -1,6 +1,6 @@
 # Toxicity Classification Pipeline
 
-A comprehensive machine learning pipeline for general toxicity prediction with statistical analysis and detailed visualizations. Can be apadted to any endpoints.
+A comprehensive machine learning pipeline for general toxicity prediction with statistical analysis and detailed visualizations. Can be adapted to any endpoints.
 
 ## Features
 

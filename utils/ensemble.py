@@ -192,7 +192,7 @@ class StackingEnsemble:
 
         return oof_predictions
 
-    def predict_proba(self, test_smiles=None):
+    def predict_proba(self):
         """
         Generate stacked predictions on test data.
 
@@ -223,7 +223,7 @@ class StackingEnsemble:
         proba = self.meta_learner.predict_proba(test_predictions)[:, 1]
         return proba
 
-    def predict(self, test_smiles=None, threshold=0.5):
+    def predict(self, threshold=0.5):
         """Generate class predictions on test data."""
-        proba = self.predict_proba(test_smiles)
+        proba = self.predict_proba()
         return (proba >= threshold).astype(int)
