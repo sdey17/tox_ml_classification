@@ -171,6 +171,8 @@ Input CSV format (both train and test):
                         help='Model type (required with --descriptor)')
     parser.add_argument('--metric', default='ROC_AUC',
                         help='Metric for best model selection (default: ROC_AUC)')
+    parser.add_argument('--hyperparams',
+                        help='Path to optimized_hyperparameters.json from Optuna')
     
     args = parser.parse_args()
     
@@ -257,9 +259,25 @@ Input CSV format (both train and test):
             X_train_scaled = X_train
             X_test_scaled = X_test
         
+        # Load optimized hyperparameters if provided
+        model_params = {}
+        if args.hyperparams:
+            hp_path = Path(args.hyperparams)
+            if hp_path.exists():
+                with open(hp_path) as f:
+                    all_params = json.load(f)
+                key = f"{descriptor}_{model}"
+                model_params = all_params.get(key, {})
+                if model_params:
+                    print(f"\nUsing optimized hyperparameters: {model_params}")
+                else:
+                    print(f"\nNo optimized params found for {key}, using defaults")
+            else:
+                print(f"\nHyperparams file not found: {hp_path}, using defaults")
+
         # Create model using ModelFactory
         print(f"\nCreating {model} model...")
-        clf = ModelFactory.create(model)
+        clf = ModelFactory.create(model, **model_params)
         
         # Train
         print(f"Training on {len(y_train)} samples...")
@@ -317,6 +335,7 @@ Input CSV format (both train and test):
             'descriptor': descriptor,
             'model': model,
             'scaler_type': 'MinMaxScaler' if descriptor.lower() == 'mordred' else 'None',
+            'hyperparameters': model_params if model_params else 'defaults',
             'timestamp': datetime.now().isoformat(),
             'model_file': model_file.name,
             'scaler_file': scaler_file.name,

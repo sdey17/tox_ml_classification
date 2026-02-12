@@ -9,6 +9,7 @@ lightgbm>=4.0.0
 xgboost>=2.0.0
 tabpfn>=6.3.1
 tabpfn-common-utils
+optuna>=3.0.0
 
 # Deep learning
 torch>=2.0.0

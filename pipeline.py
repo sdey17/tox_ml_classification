@@ -25,6 +25,7 @@ from utils.descriptors import DescriptorGenerator, get_available_descriptors
 from utils.models import CrossValidator, get_available_models
 from utils.stats import StatisticalAnalyzer, create_pairwise_matrix
 from utils.plots import Visualizer
+from utils.optimization import HyperparameterOptimizer, save_hyperparameters
 
 
 # ============================================================================
@@ -93,6 +94,11 @@ class Config:
     # Visualization settings
     VIZ_METRICS = ['ROC_AUC', 'MCC', 'GMean']  # Metrics to plot
     VIZ_DPI = 300
+
+    # Hyperparameter optimization (Optuna)
+    ENABLE_OPTUNA = True   # Set to False to skip optimization
+    OPTUNA_N_TRIALS = 50   # Number of Optuna trials per model-descriptor pair
+    OPTUNA_METRIC = 'ROC_AUC'  # Metric to optimize
 
 
 # ============================================================================
@@ -224,47 +230,98 @@ class ToxicityPipeline:
         
         return descriptors
     
-    def train_models(self, descriptors, y):
+    def optimize_hyperparameters(self, descriptors, y):
         """
-        Train all models on all descriptors with cross-validation.
-        
+        Run Optuna hyperparameter optimization for all model-descriptor pairs.
+
         Args:
             descriptors: Dictionary of descriptor_name -> features
             y: Labels
-            
+
+        Returns:
+            Dictionary mapping "descriptor_model" -> best_params
+        """
+        print("\nSTEP 3: Hyperparameter Optimization (Optuna)")
+        print(f"Trials per combination: {Config.OPTUNA_N_TRIALS}")
+        print(f"Optimizing: {Config.OPTUNA_METRIC}")
+
+        optimizer = HyperparameterOptimizer(
+            n_repeats=Config.N_REPEATS,
+            n_folds=Config.N_FOLDS,
+            random_state=Config.RANDOM_STATE,
+            device=self.cv.device,
+        )
+
+        available_models = get_available_models()
+        active_models = [m for m in Config.MODELS if m in available_models]
+
+        best_params = optimizer.optimize_all(
+            descriptors, y, active_models,
+            n_trials=Config.OPTUNA_N_TRIALS,
+            metric=Config.OPTUNA_METRIC,
+        )
+
+        # Save to file
+        params_file = self.output_dir / 'optimized_hyperparameters.json'
+        save_hyperparameters(best_params, params_file)
+
+        return best_params
+
+    def train_models(self, descriptors, y, optimized_params=None):
+        """
+        Train all models on all descriptors with cross-validation.
+
+        Args:
+            descriptors: Dictionary of descriptor_name -> features
+            y: Labels
+            optimized_params: Optional dict from optimize_hyperparameters()
+
         Returns:
             DataFrame with per-fold results
         """
-        print("\nSTEP 3: Training Models")
-        
+        step = "STEP 4" if Config.ENABLE_OPTUNA else "STEP 3"
+        print(f"\n{step}: Training Models (CV)")
+
+        if optimized_params is None:
+            optimized_params = {}
+
         available_models = get_available_models()
         all_results = []
-        
+
         for desc_name, X in descriptors.items():
             print(f"\n{desc_name}:")
-            
+
             for model_name in Config.MODELS:
                 # Skip if not available
                 if model_name not in available_models:
                     print(f"  Skipping {model_name} (not available)")
                     continue
-                
+
                 try:
-                    print(f"  Training {model_name}...")
-                    results = self.cv.run_cv(X, y, model_name, desc_name)
+                    key = f"{desc_name}_{model_name}"
+                    params = optimized_params.get(key, {})
+
+                    if params:
+                        print(f"  Training {model_name} (optimized)...")
+                    else:
+                        print(f"  Training {model_name}...")
+
+                    results = self.cv.run_cv(
+                        X, y, model_name, desc_name, model_params=params
+                    )
                     all_results.extend(results)
-                    
+
                 except Exception as e:
                     print(f"    Error: {e}")
-        
+
         # Create DataFrame
         results_df = pd.DataFrame(all_results)
-        
+
         # Save per-fold results
         results_file = self.output_dir / 'per_fold_results.csv'
         results_df.to_csv(results_file, index=False)
         print(f"\nSaved per-fold results: {results_file}")
-        
+
         return results_df
     
     def create_summary(self, results_df):
@@ -277,7 +334,8 @@ class ToxicityPipeline:
         Returns:
             DataFrame with summary statistics
         """
-        print("\nSTEP 4: Creating Summary")
+        step = "STEP 5" if Config.ENABLE_OPTUNA else "STEP 4"
+        print(f"\n{step}: Creating Summary")
         
         # Calculate means
         summary = results_df.groupby(['Descriptor', 'Model'])[Config.METRICS].mean().reset_index()
@@ -311,7 +369,8 @@ class ToxicityPipeline:
         Args:
             results_df: DataFrame with per-fold results
         """
-        print("\nSTEP 5: Statistical Analysis")
+        step = "STEP 6" if Config.ENABLE_OPTUNA else "STEP 5"
+        print(f"\n{step}: Statistical Analysis")
         
         for descriptor in results_df['Descriptor'].unique():
             print(f"\n{descriptor}:")
@@ -349,7 +408,8 @@ class ToxicityPipeline:
             results_df: Per-fold results
             summary_df: Summary statistics
         """
-        print("\nSTEP 6: Creating Visualizations")
+        step = "STEP 7" if Config.ENABLE_OPTUNA else "STEP 6"
+        print(f"\n{step}: Creating Visualizations")
         
         # Heatmaps
         print("\nHeatmaps:")
@@ -408,12 +468,20 @@ class ToxicityPipeline:
         print(f"Descriptors: {', '.join(Config.DESCRIPTORS)}")
         print(f"Models: {', '.join(Config.MODELS)}")
         print(f"Cross-validation: {Config.N_REPEATS}×{Config.N_FOLDS}")
-        
+        if Config.ENABLE_OPTUNA:
+            print(f"Optuna: {Config.OPTUNA_N_TRIALS} trials, optimizing {Config.OPTUNA_METRIC}")
+
         try:
             # Run pipeline steps
             smiles_list, y = self.load_data()
             descriptors = self.generate_descriptors(smiles_list)
-            results_df = self.train_models(descriptors, y)
+
+            # Hyperparameter optimization (optional)
+            optimized_params = {}
+            if Config.ENABLE_OPTUNA:
+                optimized_params = self.optimize_hyperparameters(descriptors, y)
+
+            results_df = self.train_models(descriptors, y, optimized_params)
             summary_df = self.create_summary(results_df)
             self.run_statistical_analysis(results_df)
             self.create_visualizations(results_df, summary_df)
@@ -427,6 +495,8 @@ class ToxicityPipeline:
             print(f"\nResults saved to: {self.output_dir}")
             print(f"  - results_summary.csv")
             print(f"  - per_fold_results.csv")
+            if Config.ENABLE_OPTUNA:
+                print(f"  - optimized_hyperparameters.json")
             print(f"  - statistical_tests/ (ANOVA, Tukey HSD, CLD)")
             print(f"  - plots/ (heatmaps, boxplots, comparisons)")
             
