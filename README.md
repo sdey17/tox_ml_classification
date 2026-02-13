@@ -19,7 +19,6 @@ A comprehensive machine learning pipeline for general toxicity prediction with s
 - [Hyperparameter Optimization](#hyperparameter-optimization)
 - [Stacking Ensemble](#stacking-ensemble)
 - [Input Format](#input-format)
-- [Output](#output)
 - [Examples](#examples)
 
 ## Installation
