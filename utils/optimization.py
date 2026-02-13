@@ -6,7 +6,6 @@ Optuna-based hyperparameter tuning for all supported models.
 Runs per (descriptor, model) combination using repeated stratified CV.
 """
 
-import logging
 import json
 from pathlib import Path
 
