@@ -13,7 +13,6 @@ Supported descriptors:
 - MolFormer embeddings
 """
 
-import warnings
 import pickle
 import hashlib
 from pathlib import Path

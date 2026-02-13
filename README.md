@@ -159,9 +159,9 @@ ensemble_model/
 
 ## Configuration
 
-### Edit `Config` Class in `pipeline.py`
+### Edit `config.py`
 
-All pipeline settings are in the `Config` class at the top of `pipeline.py`. Modify these to customize the pipeline without touching other files.
+All pipeline settings are in the `Config` class in `config.py`. Modify these to customize the pipeline without touching other files.
 
 ```python
 class Config:
@@ -253,7 +253,7 @@ The pipeline uses [Optuna](https://optuna.org/) for automatic hyperparameter tun
 | XGBoost | `n_estimators`, `learning_rate`, `max_depth`, `subsample`, `colsample_bytree`, `min_child_weight` |
 | TabPFN | Skipped (pre-trained, no tunable hyperparameters) |
 
-**To disable Optuna** and use default hyperparameters, set `ENABLE_OPTUNA = False` in the Config class.
+**To disable Optuna** and use default hyperparameters, set `ENABLE_OPTUNA = False` in `config.py`.
 
 ## Stacking Ensemble
 
@@ -322,7 +322,7 @@ All metrics are calculated automatically:
 ### Example 1: Quick Test Run
 
 ```python
-# In pipeline.py Config class:
+# In config.py:
 DESCRIPTORS = ['Morgan', 'MACCS']
 MODELS = ['LogisticRegression', 'RandomForest']
 N_REPEATS = 3
@@ -336,7 +336,7 @@ python pipeline.py --input data/test_df.csv --output quick_test/
 ### Example 2: Comprehensive Analysis
 
 ```python
-# In pipeline.py Config class:
+# In config.py:
 DESCRIPTORS = ['Morgan', 'RDKit', 'MACCS', 'Mordred', 'ChemBERTa', 'MolFormer']
 MODELS = ['KNN', 'SVM', 'Bayesian', 'LogisticRegression', 'RandomForest', 'LightGBM', 'XGBoost', 'TabPFN']
 N_REPEATS = 5
@@ -371,6 +371,7 @@ python pipeline.py --input data/train_df.csv --output new_models_results/
 
 ```
 tox_ml_classification/
+├── config.py                      # Pipeline configuration (edit this!)
 ├── pipeline.py                    # Main CV pipeline (with Optuna integration)
 ├── train_test_best_model.py       # Train final model on test set
 ├── preprocess_data.py             # Data preprocessing and splitting
