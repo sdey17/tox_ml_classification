@@ -28,6 +28,11 @@ from utils.stats import StatisticalAnalyzer, create_pairwise_matrix
 from utils.plots import Visualizer
 from utils.optimization import HyperparameterOptimizer, save_hyperparameters
 
+# Hyperparameter optimization (Optuna)
+ENABLE_OPTUNA = True   # Set to False to skip optimization
+OPTUNA_N_TRIALS = 50   # Number of Optuna trials per model-descriptor pair
+OPTUNA_METRIC = 'MCC'  # Metric to optimize
+
 
 # ============================================================================
 # MAIN PIPELINE CLASS
