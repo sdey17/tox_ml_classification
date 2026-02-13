@@ -73,4 +73,4 @@ class Config:
     # Hyperparameter optimization (Optuna)
     ENABLE_OPTUNA = True   # Set to False to skip optimization
     OPTUNA_N_TRIALS = 50   # Number of Optuna trials per model-descriptor pair
-    OPTUNA_METRIC = 'ROC_AUC'  # Metric to optimize
+    OPTUNA_METRIC = 'MCC'  # Metric to optimize
